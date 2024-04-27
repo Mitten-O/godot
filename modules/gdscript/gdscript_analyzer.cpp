@@ -1517,14 +1517,14 @@ void GDScriptAnalyzer::resolve_node(GDScriptParser::Node *p_node, bool p_is_root
 }
 
 void GDScriptAnalyzer::resolve_annotation(GDScriptParser::AnnotationNode *p_annotation) {
-	ERR_FAIL_COND_MSG(!parser->valid_annotations.has(p_annotation->name), vformat(R"(Annotation "%s" not found to validate.)", p_annotation->name));
+	ERR_FAIL_COND_MSG(!parser->known_annotations.has(p_annotation->name), vformat(R"(Annotation "%s" not found to validate.)", p_annotation->name));
 
 	if (p_annotation->is_resolved) {
 		return;
 	}
 	p_annotation->is_resolved = true;
 
-	const MethodInfo &annotation_info = parser->valid_annotations[p_annotation->name].info;
+	const MethodInfo &annotation_info = parser->known_annotations[p_annotation->name].info;
 
 	const List<PropertyInfo>::Element *E = annotation_info.arguments.front();
 	for (int i = 0; i < p_annotation->arguments.size(); i++) {

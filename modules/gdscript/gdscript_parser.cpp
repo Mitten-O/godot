@@ -74,26 +74,26 @@ Variant::Type GDScriptParser::get_builtin_type(const StringName &p_type) {
 HashMap<String, String> GDScriptParser::theme_color_names;
 #endif
 
-HashMap<StringName, GDScriptParser::AnnotationInfo> GDScriptParser::valid_annotations;
+HashMap<StringName, GDScriptParser::AnnotationInfo> GDScriptParser::known_annotations;
 
 void GDScriptParser::cleanup() {
 	builtin_types.clear();
-	valid_annotations.clear();
+	known_annotations.clear();
 }
 
 void GDScriptParser::get_annotation_list(List<MethodInfo> *r_annotations) const {
-	for (const KeyValue<StringName, AnnotationInfo> &E : valid_annotations) {
+	for (const KeyValue<StringName, AnnotationInfo> &E : known_annotations) {
 		r_annotations->push_back(E.value.info);
 	}
 }
 
 bool GDScriptParser::annotation_exists(const String &p_annotation_name) const {
-	return valid_annotations.has(p_annotation_name);
+	return known_annotations.has(p_annotation_name);
 }
 
 GDScriptParser::GDScriptParser() {
 	// Register valid annotations.
-	if (unlikely(valid_annotations.is_empty())) {
+	if (unlikely(known_annotations.is_empty())) {
 		register_annotation(MethodInfo("@tool"), AnnotationInfo::SCRIPT, &GDScriptParser::tool_annotation);
 		register_annotation(MethodInfo("@icon", PropertyInfo(Variant::STRING, "icon_path")), AnnotationInfo::SCRIPT, &GDScriptParser::icon_annotation);
 		register_annotation(MethodInfo("@static_unload"), AnnotationInfo::SCRIPT, &GDScriptParser::static_unload_annotation);
@@ -1579,12 +1579,12 @@ GDScriptParser::AnnotationNode *GDScriptParser::parse_annotation(uint32_t p_vali
 
 	bool valid = true;
 
-	if (!valid_annotations.has(annotation->name)) {
+	if (!known_annotations.has(annotation->name)) {
 		push_error(vformat(R"(Unrecognized annotation: "%s".)", annotation->name));
 		valid = false;
 	}
 
-	annotation->info = &valid_annotations[annotation->name];
+	annotation->info = &known_annotations[annotation->name];
 
 	if (!annotation->applies_to(p_valid_targets)) {
 		if (annotation->applies_to(AnnotationInfo::SCRIPT)) {
@@ -1643,7 +1643,7 @@ void GDScriptParser::clear_unused_annotations() {
 }
 
 bool GDScriptParser::register_annotation(const MethodInfo &p_info, uint32_t p_target_kinds, AnnotationAction p_apply, const Vector<Variant> &p_default_arguments, bool p_is_vararg) {
-	ERR_FAIL_COND_V_MSG(valid_annotations.has(p_info.name), false, vformat(R"(Annotation "%s" already registered.)", p_info.name));
+	ERR_FAIL_COND_V_MSG(known_annotations.has(p_info.name), false, vformat(R"(Annotation "%s" already registered.)", p_info.name));
 
 	AnnotationInfo new_annotation;
 	new_annotation.info = p_info;
@@ -1654,7 +1654,7 @@ bool GDScriptParser::register_annotation(const MethodInfo &p_info, uint32_t p_ta
 	new_annotation.apply = p_apply;
 	new_annotation.target_kind = p_target_kinds;
 
-	valid_annotations[p_info.name] = new_annotation;
+	known_annotations[p_info.name] = new_annotation;
 	return true;
 }
 
@@ -3991,7 +3991,7 @@ bool GDScriptParser::AnnotationNode::apply(GDScriptParser *p_this, Node *p_targe
 		return true;
 	}
 	is_applied = true;
-	return (p_this->*(p_this->valid_annotations[name].apply))(this, p_target, p_class);
+	return (p_this->*(p_this->known_annotations[name].apply))(this, p_target, p_class);
 }
 
 bool GDScriptParser::AnnotationNode::applies_to(uint32_t p_target_kinds) const {
@@ -3999,9 +3999,9 @@ bool GDScriptParser::AnnotationNode::applies_to(uint32_t p_target_kinds) const {
 }
 
 bool GDScriptParser::validate_annotation_arguments(AnnotationNode *p_annotation) {
-	ERR_FAIL_COND_V_MSG(!valid_annotations.has(p_annotation->name), false, vformat(R"(Annotation "%s" not found to validate.)", p_annotation->name));
+	ERR_FAIL_COND_V_MSG(!known_annotations.has(p_annotation->name), false, vformat(R"(Annotation "%s" not found to validate.)", p_annotation->name));
 
-	const MethodInfo &info = valid_annotations[p_annotation->name].info;
+	const MethodInfo &info = known_annotations[p_annotation->name].info;
 
 	if (((info.flags & METHOD_FLAG_VARARG) == 0) && p_annotation->arguments.size() > info.arguments.size()) {
 		push_error(vformat(R"(Annotation "%s" requires at most %d arguments, but %d were given.)", p_annotation->name, info.arguments.size(), p_annotation->arguments.size()));

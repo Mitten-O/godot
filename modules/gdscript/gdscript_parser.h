@@ -1257,6 +1257,8 @@ public:
 		PropertyInfo export_info;
 		int assignments = 0;
 		bool is_static = false;
+
+		Vector<AnnotationNode *> annotations;
 #ifdef TOOLS_ENABLED
 		MemberDocData doc_data;
 #endif // TOOLS_ENABLED
@@ -1385,7 +1387,7 @@ private:
 		AnnotationAction apply = nullptr;
 		MethodInfo info;
 	};
-	static HashMap<StringName, AnnotationInfo> valid_annotations;
+	static HashMap<StringName, AnnotationInfo> known_annotations;
 	List<AnnotationNode *> annotation_stack;
 
 	typedef ExpressionNode *(GDScriptParser::*ParseFunction)(ExpressionNode *p_previous_operand, bool p_can_assign);
