@@ -397,6 +397,10 @@ bool GDScript::get_property_default_value(const StringName &p_property, Variant 
 TypedArray<Annotation> GDScript::get_script_property_annotations(const StringName &p_property ) {
 	// Return an empty array for now.
 	TypedArray<Annotation> annotations;
+	Ref<Annotation> annotation;
+	annotation.instantiate();
+	annotation->set_name(String("Bumble"));
+	annotations.append(Variant(annotation));
 	return annotations;
 }
 
