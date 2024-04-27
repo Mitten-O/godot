@@ -106,6 +106,13 @@ public:
 
 class PlaceHolderScriptInstance;
 
+// Annotations are used to add metadata to properties of objects.
+// Users can derive from Annotation to add custom annotations.
+class Annotation : public Resource {
+	GDCLASS(Annotation, Resource);
+	OBJ_SAVE_TYPE(Annotation);
+};
+
 class Script : public Resource {
 	GDCLASS(Script, Resource);
 	OBJ_SAVE_TYPE(Script);
@@ -173,6 +180,9 @@ public:
 	virtual void update_exports() {} //editor tool
 	virtual void get_script_method_list(List<MethodInfo> *p_list) const = 0;
 	virtual void get_script_property_list(List<PropertyInfo> *p_list) const = 0;
+
+	// Get the annotations on a property.
+	virtual TypedArray<Annotation> get_script_property_annotations(const StringName &p_property ) { return TypedArray<Annotation>(); }
 
 	virtual int get_member_line(const StringName &p_member) const { return -1; }
 

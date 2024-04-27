@@ -308,6 +308,7 @@ public:
 	Vector<uint8_t> get_as_binary_tokens() const;
 
 	bool get_property_default_value(const StringName &p_property, Variant &r_value) const override;
+	virtual TypedArray<Annotation> get_script_property_annotations(const StringName &p_property ) override;
 
 	virtual void get_script_method_list(List<MethodInfo> *p_list) const override;
 	virtual bool has_method(const StringName &p_method) const override;

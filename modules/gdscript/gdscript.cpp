@@ -394,6 +394,12 @@ bool GDScript::get_property_default_value(const StringName &p_property, Variant 
 	return false;
 }
 
+TypedArray<Annotation> GDScript::get_script_property_annotations(const StringName &p_property ) {
+	// Return an empty array for now.
+	TypedArray<Annotation> annotations;
+	return annotations;
+}
+
 ScriptInstance *GDScript::instance_create(Object *p_this) {
 	GDScript *top = this;
 	while (top->_base) {
