@@ -74,7 +74,17 @@ Variant::Type GDScriptParser::get_builtin_type(const StringName &p_type) {
 HashMap<String, String> GDScriptParser::theme_color_names;
 #endif
 
+GDScriptParser::AnnotationInfo& GDScriptParser::get_dynamic_property_annotation_info()
+{
+	static GDScriptParser::AnnotationInfo info;
+	info.info = MethodInfo("@dynamic");
+	info.target_kind = AnnotationInfo::VARIABLE;
+	// Should we set the apply to something that gives an error when it's called?
+	return info;
+}
+
 HashMap<StringName, GDScriptParser::AnnotationInfo> GDScriptParser::known_annotations;
+GDScriptParser::AnnotationInfo GDScriptParser::dynamic_property_annotation;
 
 void GDScriptParser::cleanup() {
 	builtin_types.clear();
@@ -1579,20 +1589,23 @@ GDScriptParser::AnnotationNode *GDScriptParser::parse_annotation(uint32_t p_vali
 
 	bool valid = true;
 
-	if (!known_annotations.has(annotation->name)) {
-		push_error(vformat(R"(Unrecognized annotation: "%s".)", annotation->name));
-		valid = false;
-	}
+	if (known_annotations.has(annotation->name)) {
+		// Get the info from the registry.
+		annotation->info = &known_annotations[annotation->name];
 
-	annotation->info = &known_annotations[annotation->name];
-
-	if (!annotation->applies_to(p_valid_targets)) {
-		if (annotation->applies_to(AnnotationInfo::SCRIPT)) {
-			push_error(vformat(R"(Annotation "%s" must be at the top of the script, before "extends" and "class_name".)", annotation->name));
-		} else {
-			push_error(vformat(R"(Annotation "%s" is not allowed in this level.)", annotation->name));
+		// Validate the target for hard coded annotations.
+		// The validation of dynamic annotations has to be done in the Analyzer.
+		if (!annotation->applies_to(p_valid_targets)) {
+			if (annotation->applies_to(AnnotationInfo::SCRIPT)) {
+				push_error(vformat(R"(Annotation "%s" must be at the top of the script, before "extends" and "class_name".)", annotation->name));
+			} else {
+				push_error(vformat(R"(Annotation "%s" is not allowed in this level.)", annotation->name));
+			}
+			valid = false;
 		}
-		valid = false;
+	} else {
+		// Use the shared info.
+		annotation->info = &get_dynamic_property_annotation_info();
 	}
 
 	if (check(GDScriptTokenizer::Token::PARENTHESIS_OPEN)) {
@@ -3991,7 +4004,20 @@ bool GDScriptParser::AnnotationNode::apply(GDScriptParser *p_this, Node *p_targe
 		return true;
 	}
 	is_applied = true;
-	return (p_this->*(p_this->known_annotations[name].apply))(this, p_target, p_class);
+
+	// Apply hard-coded annotations using the registered handler.
+	if(p_this->known_annotations.has(name))
+		return (p_this->*(p_this->known_annotations[name].apply))(this, p_target, p_class);
+
+	// Store unknown annotations in the target node for processing in the analyzer.
+	// Only property annotations are supported for now.
+	if(p_target->type != Node::VARIABLE) {
+		p_this->push_error(R"(Dynamic annotations are only supported on variables.)", this);
+		return false;
+	}
+	VariableNode *p_variable = static_cast<VariableNode *>(p_target);
+	p_variable->annotations.append(this);
+	return true;
 }
 
 bool GDScriptParser::AnnotationNode::applies_to(uint32_t p_target_kinds) const {
@@ -3999,7 +4025,11 @@ bool GDScriptParser::AnnotationNode::applies_to(uint32_t p_target_kinds) const {
 }
 
 bool GDScriptParser::validate_annotation_arguments(AnnotationNode *p_annotation) {
-	ERR_FAIL_COND_V_MSG(!known_annotations.has(p_annotation->name), false, vformat(R"(Annotation "%s" not found to validate.)", p_annotation->name));
+	// Only built-in annotation's parameters can be validated here.
+	// Dynamic annotation parameter validation has to happen in the
+	// analyzer.
+	if(!known_annotations.has(p_annotation->name))
+		return true;
 
 	const MethodInfo &info = known_annotations[p_annotation->name].info;
 

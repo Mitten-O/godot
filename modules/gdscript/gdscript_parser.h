@@ -1388,7 +1388,12 @@ private:
 		MethodInfo info;
 	};
 	static HashMap<StringName, AnnotationInfo> known_annotations;
+	static AnnotationInfo dynamic_property_annotation;
 	List<AnnotationNode *> annotation_stack;
+
+	// Annotation info for all dynamic annotations that can target only properties.
+	// (Which is currently all of them.)
+	static AnnotationInfo& get_dynamic_property_annotation_info();
 
 	typedef ExpressionNode *(GDScriptParser::*ParseFunction)(ExpressionNode *p_previous_operand, bool p_can_assign);
 	// Higher value means higher precedence (i.e. is evaluated first).
