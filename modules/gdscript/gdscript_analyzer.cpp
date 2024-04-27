@@ -1517,22 +1517,36 @@ void GDScriptAnalyzer::resolve_node(GDScriptParser::Node *p_node, bool p_is_root
 }
 
 void GDScriptAnalyzer::resolve_annotation(GDScriptParser::AnnotationNode *p_annotation) {
-	ERR_FAIL_COND_MSG(!parser->known_annotations.has(p_annotation->name), vformat(R"(Annotation "%s" not found to validate.)", p_annotation->name));
+	// We will eventually need to support custom annotations here.
+	// But for that we'll need to resolve the type.
+	// And for that we'll need a TypeNode, I think, and
+	// to parse one of those after the @, we'll need
+	// to change the tokenizer.
+	// For now, let's just not type check custom annotations.
+	bool is_known = parser->known_annotations.has(p_annotation->name);
 
 	if (p_annotation->is_resolved) {
 		return;
 	}
 	p_annotation->is_resolved = true;
 
-	const MethodInfo &annotation_info = parser->known_annotations[p_annotation->name].info;
+	// Keep track of expected types if they are known.
+	const List<PropertyInfo>::Element *E = nullptr;
+	if (is_known) {
+		const MethodInfo &annotation_info = parser->known_annotations[p_annotation->name].info;
+		E = annotation_info.arguments.front();
+	}
 
-	const List<PropertyInfo>::Element *E = annotation_info.arguments.front();
+	// Resolve each argument.
 	for (int i = 0; i < p_annotation->arguments.size(); i++) {
 		GDScriptParser::ExpressionNode *argument = p_annotation->arguments[i];
-		const PropertyInfo &argument_info = E->get();
+		const PropertyInfo *argument_info = nullptr;
 
-		if (E->next() != nullptr) {
-			E = E->next();
+		if( is_known ) {
+			argument_info = &E->get();
+			if (E->next() != nullptr) {
+				E = E->next();
+			}
 		}
 
 		reduce_expression(argument);
@@ -1544,25 +1558,25 @@ void GDScriptAnalyzer::resolve_annotation(GDScriptParser::AnnotationNode *p_anno
 
 		Variant value = argument->reduced_value;
 
-		if (value.get_type() != argument_info.type) {
+		if (argument_info && value.get_type() != argument_info->type) {
 #ifdef DEBUG_ENABLED
-			if (argument_info.type == Variant::INT && value.get_type() == Variant::FLOAT) {
+			if (argument_info->type == Variant::INT && value.get_type() == Variant::FLOAT) {
 				parser->push_warning(argument, GDScriptWarning::NARROWING_CONVERSION);
 			}
 #endif
 
-			if (!Variant::can_convert_strict(value.get_type(), argument_info.type)) {
-				push_error(vformat(R"(Invalid argument for annotation "%s": argument %d should be "%s" but is "%s".)", p_annotation->name, i + 1, Variant::get_type_name(argument_info.type), argument->get_datatype().to_string()), argument);
+			if (!Variant::can_convert_strict(value.get_type(), argument_info->type)) {
+				push_error(vformat(R"(Invalid argument for annotation "%s": argument %d should be "%s" but is "%s".)", p_annotation->name, i + 1, Variant::get_type_name(argument_info->type), argument->get_datatype().to_string()), argument);
 				return;
 			}
 
 			Variant converted_to;
 			const Variant *converted_from = &value;
 			Callable::CallError call_error;
-			Variant::construct(argument_info.type, converted_to, &converted_from, 1, call_error);
+			Variant::construct(argument_info->type, converted_to, &converted_from, 1, call_error);
 
 			if (call_error.error != Callable::CallError::CALL_OK) {
-				push_error(vformat(R"(Cannot convert argument %d of annotation "%s" from "%s" to "%s".)", i + 1, p_annotation->name, Variant::get_type_name(value.get_type()), Variant::get_type_name(argument_info.type)), argument);
+				push_error(vformat(R"(Cannot convert argument %d of annotation "%s" from "%s" to "%s".)", i + 1, p_annotation->name, Variant::get_type_name(value.get_type()), Variant::get_type_name(argument_info->type)), argument);
 				return;
 			}
 
@@ -1571,6 +1585,7 @@ void GDScriptAnalyzer::resolve_annotation(GDScriptParser::AnnotationNode *p_anno
 
 		p_annotation->resolved_arguments.push_back(value);
 	}
+
 }
 
 void GDScriptAnalyzer::resolve_function_signature(GDScriptParser::FunctionNode *p_function, const GDScriptParser::Node *p_source, bool p_is_lambda) {
