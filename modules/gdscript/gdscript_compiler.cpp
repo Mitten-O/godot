@@ -2770,6 +2770,25 @@ Error GDScriptCompiler::_prepare_compilation(GDScript *p_script, const GDScriptP
 					p_script->members.insert(name);
 				}
 
+				// Store custom annotations.
+				for (GDScriptParser::AnnotationNode *annotation: variable->annotations) {
+					// We cannot yet create the live annotation objects,
+					// because that would require instantiating other scripts,
+					// which is illegal in the _prepare_compilation phase.
+					// Instead, we store annotation thunks, which the script can
+					// create the real instances from lazily, when somebody first asks for
+					// the annotations.
+
+					// First get the class name by removing the @ from the annotation name.
+					String annotation_name = annotation->name;
+					if (annotation_name.begins_with("@"))
+						annotation_name = annotation_name.substr(1);
+					
+					// Register the thunk.
+					p_script->add_script_property_annotation(name, StringName(annotation_name), annotation->resolved_arguments);
+				}
+
+
 #ifdef TOOLS_ENABLED
 				if (variable->initializer != nullptr && variable->initializer->is_constant) {
 					p_script->member_default_values[name] = variable->initializer->reduced_value;

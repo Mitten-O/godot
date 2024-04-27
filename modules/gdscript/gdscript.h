@@ -108,6 +108,16 @@ class GDScript : public Script {
 	HashMap<StringName, GDScriptFunction *> member_functions;
 	HashMap<StringName, Ref<GDScript>> subclasses;
 	HashMap<StringName, MethodInfo> _signals;
+
+	// Saves the information required to instantiate an annotation
+	// and the instantiation if it has been instantiated.
+	// Used to instantiate the annotations lazily.
+	struct AnnotationThunk {
+		StringName annotation_class_name;
+		Vector<Variant> arguments;
+		Ref<Annotation> lazy_annotation;
+	};
+	HashMap<StringName, Vector<AnnotationThunk>> property_annotations;
 	Dictionary rpc_config;
 
 	struct LambdaInfo {
@@ -309,6 +319,11 @@ public:
 
 	bool get_property_default_value(const StringName &p_property, Variant &r_value) const override;
 	virtual TypedArray<Annotation> get_script_property_annotations(const StringName &p_property ) override;
+
+	// Adds an annotation for a property.
+	// The full annotation object is instantiated lazily from the parameters
+	// when first requested.
+	virtual void add_script_property_annotation(const StringName &p_property, const StringName &p_annotation_class_name, const Vector<Variant> &arguments);
 
 	virtual void get_script_method_list(List<MethodInfo> *p_list) const override;
 	virtual bool has_method(const StringName &p_method) const override;

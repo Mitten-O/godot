@@ -394,14 +394,58 @@ bool GDScript::get_property_default_value(const StringName &p_property, Variant 
 	return false;
 }
 
-TypedArray<Annotation> GDScript::get_script_property_annotations(const StringName &p_property ) {
-	// Return an empty array for now.
+TypedArray<Annotation> GDScript::get_script_property_annotations(const StringName &p_property) {
+	// Check if there are annotations for the property.
+	HashMap<StringName, Vector<AnnotationThunk>>::Iterator E = property_annotations.find(p_property);
+	if (!E) {
+		// There are none. Return an empty array.
+		return TypedArray<Annotation>();
+	}
+	
+	// Instantiate the thunks if necessary and place them in the array.
 	TypedArray<Annotation> annotations;
-	Ref<Annotation> annotation;
-	annotation.instantiate();
-	annotation->set_name(String("Bumble"));
-	annotations.append(Variant(annotation));
+	for( AnnotationThunk &thunk: E->value) {
+		if (thunk.lazy_annotation.is_null()) {
+			// Wait... just because the annotation will necessarily inherit from the
+			// class Annotation mapped to the C++ class Annotation,
+			// doesn't mean I can actually stick an annotation defined by a GDScript
+			// into a Ref expecting a C++ Annotation. Hmm..
+			// I'll need to figure out how the engine gives special treatment
+			// to scripts that derive from Node.
+			// I think I figured it out. Scripts don't exist by themselves.
+			// They are attached to objects. So I simply create an annotation
+			// object and attach the correct script to it.
+			String script_path = ScriptServer::get_global_class_path(thunk.annotation_class_name);
+			Ref<Script> annotation_script = ResourceLoader::load(script_path, "Script");
+			thunk.lazy_annotation.instantiate();
+			thunk.lazy_annotation->set_script(annotation_script);
+		}
+
+		annotations.append(thunk.lazy_annotation);
+	}
+
 	return annotations;
+}
+
+// Adds an annotation for a property.
+void GDScript::add_script_property_annotation(const StringName &p_property, const StringName &p_annotation_class_name, const Vector<Variant> &arguments) {
+	// Ensure there are annotations for the property.
+	Vector<AnnotationThunk> *p_annotations;
+	HashMap<StringName, Vector<AnnotationThunk>>::Iterator E = property_annotations.find(p_property);
+	if (E) {
+		// Use the existing array.
+		p_annotations = &E->value;
+	} else {
+		// Create a new array.
+		property_annotations[p_property] = Vector<AnnotationThunk>();
+		p_annotations = &property_annotations[p_property];
+	}
+
+	// Add a thunk for the annotation to the list.
+	AnnotationThunk thunk;
+	thunk.annotation_class_name = p_annotation_class_name;
+	thunk.arguments = arguments;
+	p_annotations->append(thunk);
 }
 
 ScriptInstance *GDScript::instance_create(Object *p_this) {
