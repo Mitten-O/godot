@@ -277,12 +277,14 @@ StringName::StringName(const StaticCString &p_static_string, bool p_static) {
 
 	MutexLock lock(mutex);
 
+	// Look up the string in the global hash table of StringName strings.
 	uint32_t hash = String::hash(p_static_string.ptr);
-
 	uint32_t idx = hash & STRING_TABLE_MASK;
-
 	_data = _table[idx];
 
+	// Multiple strings can have the same hash, so the hash table slot contents
+	// are linked lists of all the strings with the hash of the slot.
+	// Find the exact string match in the list.
 	while (_data) {
 		// compare hash first
 		if (_data->hash == hash && _data->get_name() == p_static_string.ptr) {
@@ -304,6 +306,7 @@ StringName::StringName(const StaticCString &p_static_string, bool p_static) {
 		return;
 	}
 
+	// This string has not been encountered before. Create the datum for it.
 	_data = memnew(_Data);
 
 	_data->refcount.init();

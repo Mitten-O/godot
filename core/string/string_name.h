@@ -39,11 +39,21 @@
 
 class Main;
 
+// A strongly typed wrapper for C-style string literals.
+// Used to make it explicit that a variable is pointer to a C-style compile time
+// string literal, not just a char pointer that happens to be constant.
 struct StaticCString {
 	const char *ptr;
 	static StaticCString create(const char *p_ptr);
 };
 
+// An interned string class, useful for identifiers.
+//
+// StringNames are interned, which means every StringName with the same content points to the same data.
+// This makes comparisons of StringNames extremely fast (just compare the data pointers),
+// while slowing down their initialization (we have to check if the data with the given content already exists).
+// This makes them ideal for identities, because there is a finite, static population of them and they are compared
+// far more often than created.
 class StringName {
 	enum {
 		STRING_TABLE_BITS = 16,
@@ -67,6 +77,8 @@ class StringName {
 		_Data() {}
 	};
 
+	// This is the global database of all interned strings.
+	// Implemented as a hash table.
 	static _Data *_table[STRING_TABLE_LEN];
 
 	_Data *_data = nullptr;
