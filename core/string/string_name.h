@@ -104,7 +104,14 @@ class StringName {
 	StringName(_Data *p_data) { _data = p_data; }
 
 	// Shared logic for constructors.
-	void initialize(const char *p_cname, String *p_sname, bool p_static);
+	template <typename TString>
+	void initialize(const TString p_name, bool p_static);
+
+	// Helper for varying the initialization of the data depending on the input type.
+	// Strings and c-strings are store in the name-field, while StaticCStrings in the cname-field.
+	static void set_data(_Data &p_data, const char *p_name);
+	static void set_data(_Data &p_data, const String &p_name);
+	static void set_data(_Data &p_data, const StaticCString &p_name);
 
 public:
 	operator const void *() const { return (_data && (_data->cname || !_data->name.is_empty())) ? (void *)1 : nullptr; }

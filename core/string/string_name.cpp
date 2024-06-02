@@ -207,21 +207,71 @@ void StringName::assign_static_unique_class_name(StringName *ptr, const char *p_
 	mutex.unlock();
 }
 
-void StringName::initialize(const char *p_cname, String *p_sname, bool p_static) {
+// The details of the initialization of a StringName vary slightly
+// depending on the input type it is being constructed with.
+// This namespace holds overloaded functions that handle that variance.
+namespace _StringNameInit {
+
+// Gets the hash of the string-like input.
+uint32_t string_hash(const StaticCString &p_string) {
+	return String::hash(p_string.ptr);
+}
+
+// Gets the hash of the string-like input.
+uint32_t string_hash(const String &p_string) {
+	return p_string.hash();
+}
+
+// Gets the hash of the string-like input.
+uint32_t string_hash(const char *p_string) {
+	return String::hash(p_string);
+}
+
+// Returns true if the string-like input matches the string.
+bool string_equals(const String &p_left, const StaticCString &p_right) {
+	return p_left == p_right.ptr;
+}
+
+// Returns true if the string-like input matches the string.
+bool string_equals(const String &p_left, const String &p_right) {
+	return p_left == p_right;
+}
+
+// Returns true if the string-like input matches the string.
+bool string_equals(const String &p_left, const char *p_right) {
+	return p_left == p_right;
+}
+
+} //namespace _StringNameInit
+
+void StringName::set_data(StringName::_Data &data, const char *p_string) {
+	data.name = p_string;
+}
+
+void StringName::set_data(StringName::_Data &data, const String &p_string) {
+	data.name = p_string;
+}
+
+void StringName::set_data(StringName::_Data &data, const StaticCString &p_string) {
+	data.cname = p_string.ptr;
+}
+
+// Initializes a StringName object from a string-like input.
+template <typename TString>
+void StringName::initialize(const TString p_name, bool p_static) {
+	// Grab a lock protecting the global table of interned strings.
 	MutexLock lock(mutex);
 
-	// There must be either a C-String or a string provided.
-	ERR_FAIL_COND_MSG(!p_cname && !p_sname, "StringName must be initialized with a raw C string or a String. Received neither.");
-
-	uint32_t hash = p_cname ? String::hash(p_cname) : p_sname->hash();
+	uint32_t hash = _StringNameInit::string_hash(p_name);
 
 	uint32_t idx = hash & STRING_TABLE_MASK;
 
+	// Try to find the data block for this string from the global table.
 	_data = _table[idx];
 
 	while (_data) {
 		// compare hash first
-		if (_data->hash == hash && _data->get_name() == p_name) {
+		if (_data->hash == hash && _StringNameInit::string_equals(_data->get_name(), p_name)) {
 			break;
 		}
 		_data = _data->next;
@@ -240,15 +290,18 @@ void StringName::initialize(const char *p_cname, String *p_sname, bool p_static)
 		return;
 	}
 
+	// Create a new data block for this string.
 	_data = memnew(_Data);
-	_data->name = p_cname;
 	_data->refcount.init();
 	_data->static_count.set(p_static ? 1 : 0);
 	_data->hash = hash;
 	_data->idx = idx;
-	_data->cname = nullptr;
 	_data->next = _table[idx];
 	_data->prev = nullptr;
+
+	// The name is stored a bit differently depending on the type of p_name.
+	// Use an overloaded method to handle that variance.
+	set_data(*_data, p_name);
 
 #ifdef DEBUG_ENABLED
 	if (unlikely(debug_stringname)) {
@@ -272,7 +325,7 @@ StringName::StringName(const char *p_name, bool p_static) {
 		return; //empty, ignore
 	}
 
-	initialize(p_name, nullptr, p_static);
+	initialize(p_name, p_static);
 }
 
 StringName::StringName(const StaticCString &p_static_string, bool p_static) {
@@ -282,58 +335,7 @@ StringName::StringName(const StaticCString &p_static_string, bool p_static) {
 
 	ERR_FAIL_COND(!p_static_string.ptr || !p_static_string.ptr[0]);
 
-	MutexLock lock(mutex);
-
-	// Look up the string in the global hash table of StringName strings.
-	uint32_t hash = String::hash(p_static_string.ptr);
-	uint32_t idx = hash & STRING_TABLE_MASK;
-	_data = _table[idx];
-
-	// Multiple strings can have the same hash, so the hash table slot contents
-	// are linked lists of all the strings with the hash of the slot.
-	// Find the exact string match in the list.
-	while (_data) {
-		// compare hash first
-		if (_data->hash == hash && _data->get_name() == p_static_string.ptr) {
-			break;
-		}
-		_data = _data->next;
-	}
-
-	if (_data && _data->refcount.ref()) {
-		// exists
-		if (p_static) {
-			_data->static_count.increment();
-		}
-#ifdef DEBUG_ENABLED
-		if (unlikely(debug_stringname)) {
-			_data->debug_references++;
-		}
-#endif
-		return;
-	}
-
-	// This string has not been encountered before. Create the datum for it.
-	_data = memnew(_Data);
-
-	_data->refcount.init();
-	_data->static_count.set(p_static ? 1 : 0);
-	_data->hash = hash;
-	_data->idx = idx;
-	_data->cname = p_static_string.ptr;
-	_data->next = _table[idx];
-	_data->prev = nullptr;
-#ifdef DEBUG_ENABLED
-	if (unlikely(debug_stringname)) {
-		// Keep in memory, force static.
-		_data->refcount.ref();
-		_data->static_count.increment();
-	}
-#endif
-	if (_table[idx]) {
-		_table[idx]->prev = _data;
-	}
-	_table[idx] = _data;
+	initialize(p_static_string, p_static);
 }
 
 StringName::StringName(const String &p_name, bool p_static) {
@@ -345,54 +347,7 @@ StringName::StringName(const String &p_name, bool p_static) {
 		return;
 	}
 
-	MutexLock lock(mutex);
-
-	uint32_t hash = p_name.hash();
-	uint32_t idx = hash & STRING_TABLE_MASK;
-
-	_data = _table[idx];
-
-	while (_data) {
-		if (_data->hash == hash && _data->get_name() == p_name) {
-			break;
-		}
-		_data = _data->next;
-	}
-
-	if (_data && _data->refcount.ref()) {
-		// exists
-		if (p_static) {
-			_data->static_count.increment();
-		}
-#ifdef DEBUG_ENABLED
-		if (unlikely(debug_stringname)) {
-			_data->debug_references++;
-		}
-#endif
-		return;
-	}
-
-	_data = memnew(_Data);
-	_data->name = p_name;
-	_data->refcount.init();
-	_data->static_count.set(p_static ? 1 : 0);
-	_data->hash = hash;
-	_data->idx = idx;
-	_data->cname = nullptr;
-	_data->next = _table[idx];
-	_data->prev = nullptr;
-#ifdef DEBUG_ENABLED
-	if (unlikely(debug_stringname)) {
-		// Keep in memory, force static.
-		_data->refcount.ref();
-		_data->static_count.increment();
-	}
-#endif
-
-	if (_table[idx]) {
-		_table[idx]->prev = _data;
-	}
-	_table[idx] = _data;
+	initialize(p_name, p_static);
 }
 
 StringName StringName::search(const char *p_name) {
