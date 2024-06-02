@@ -81,10 +81,6 @@ class StringName {
 	// Implemented as a hash table.
 	static _Data *_table[STRING_TABLE_LEN];
 
-	// Tries to find an existing data block for the given string.
-	// It is only safe to call this if you are holding the lock on the mutex, hence there is an unused dummy parameter to ensure you can't forget.
-	static _Data *lookup_existing_string(const char *p_name, uint32_t hash, uint32_t idx, const MutexLock<Mutex> &);
-
 	_Data *_data = nullptr;
 
 	void unref();
