@@ -103,6 +103,9 @@ class StringName {
 
 	StringName(_Data *p_data) { _data = p_data; }
 
+	// Shared logic for constructors.
+	void initialize(const char *p_cname, String *p_sname, bool p_static);
+
 public:
 	operator const void *() const { return (_data && (_data->cname || !_data->name.is_empty())) ? (void *)1 : nullptr; }
 
