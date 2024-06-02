@@ -116,6 +116,22 @@ void StringName::cleanup() {
 	configured = false;
 }
 
+StringName::_Data *StringName::lookup_existing_string(const char *p_name, uint32_t p_hash, uint32_t p_idx, const MutexLock<Mutex> &) {
+	// Get the first data block with the index of the hash.
+	_Data *data = _table[p_idx];
+
+	// Find the data block that matches the string.
+	while (data) {
+		// compare hash first
+		if (data->hash == p_hash && data->get_name() == p_name) {
+			break;
+		}
+		data = data->next;
+	}
+
+	return data;
+}
+
 void StringName::unref() {
 	ERR_FAIL_COND(!configured);
 
@@ -222,16 +238,10 @@ StringName::StringName(const char *p_name, bool p_static) {
 
 	uint32_t idx = hash & STRING_TABLE_MASK;
 
-	_data = _table[idx];
+	// Try to find an existing data block for this string.
+	_data = lookup_existing_string(p_name, hash, idx, lock);
 
-	while (_data) {
-		// compare hash first
-		if (_data->hash == hash && _data->get_name() == p_name) {
-			break;
-		}
-		_data = _data->next;
-	}
-
+	// If a matching data block was found, use it.
 	if (_data && _data->refcount.ref()) {
 		// exists
 		if (p_static) {
@@ -242,30 +252,32 @@ StringName::StringName(const char *p_name, bool p_static) {
 			_data->debug_references++;
 		}
 #endif
-		return;
 	}
+	return;
+}
 
-	_data = memnew(_Data);
-	_data->name = p_name;
-	_data->refcount.init();
-	_data->static_count.set(p_static ? 1 : 0);
-	_data->hash = hash;
-	_data->idx = idx;
-	_data->cname = nullptr;
-	_data->next = _table[idx];
-	_data->prev = nullptr;
+// Create a new data block for this string.
+_data = memnew(_Data);
+_data->name = p_name;
+_data->refcount.init();
+_data->static_count.set(p_static ? 1 : 0);
+_data->hash = hash;
+_data->idx = idx;
+_data->cname = nullptr;
+_data->next = _table[idx];
+_data->prev = nullptr;
 
 #ifdef DEBUG_ENABLED
-	if (unlikely(debug_stringname)) {
-		// Keep in memory, force static.
-		_data->refcount.ref();
-		_data->static_count.increment();
-	}
+if (unlikely(debug_stringname)) {
+	// Keep in memory, force static.
+	_data->refcount.ref();
+	_data->static_count.increment();
+}
 #endif
-	if (_table[idx]) {
-		_table[idx]->prev = _data;
-	}
-	_table[idx] = _data;
+if (_table[idx]) {
+	_table[idx]->prev = _data;
+}
+_table[idx] = _data;
 }
 
 StringName::StringName(const StaticCString &p_static_string, bool p_static) {
